@@ -393,7 +393,9 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
       <div class="rnd display" id="status-main">Revealing pick #18</div>
       <div class="ov" id="status-sub">1 of 18</div>
     </div>
-    <div class="controls"></div>
+    <div class="controls">
+      <button id="reset-lottery-btn" class="small" type="button">Reset lottery</button>
+    </div>
   </div>
 
   <div class="stage">
@@ -457,8 +459,8 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
 <!-- ============ PASSWORD MODAL (protects resetting the lottery) ============ -->
 <div class="password-overlay" id="password-overlay">
   <div class="password-box">
-    <h3 class="display">Enter password to reset</h3>
-    <p>Resetting clears the current draft order. Enter the reset password to continue.</p>
+    <h3 class="display" id="password-title">Enter password to reset</h3>
+    <p id="password-desc">Resetting clears the current draft order. Enter the reset password to continue.</p>
     <input type="password" id="password-input" placeholder="Password" autocomplete="off">
     <div class="password-error" id="password-error"></div>
     <div class="password-actions">
@@ -717,6 +719,7 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
   var downloadTxtBtn = document.getElementById('download-txt');
   var newDraftBtn = document.getElementById('new-draft-btn');
   var replayAgainBtn = document.getElementById('replay-again-btn');
+  var resetLotteryBtn = document.getElementById('reset-lottery-btn');
 
   var replayBanner = document.getElementById('replay-banner');
   var replayDateSpan = document.getElementById('replay-date');
@@ -724,6 +727,8 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
 
   var passwordOverlay = document.getElementById('password-overlay');
   var passwordBox = passwordOverlay.querySelector('.password-box');
+  var passwordTitleEl = document.getElementById('password-title');
+  var passwordDescEl = document.getElementById('password-desc');
   var passwordInput = document.getElementById('password-input');
   var passwordError = document.getElementById('password-error');
   var passwordConfirmBtn = document.getElementById('password-confirm');
@@ -763,6 +768,14 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
   if(saved && saved.order && saved.phase === 'running'){ showResumeBanner(saved); }
 
   beginBtn.addEventListener('click', function(){
+    openPasswordModal(
+      beginLottery,
+      'Enter password to start',
+      'Starting the lottery requires the password. Enter it to continue.'
+    );
+  });
+
+  function beginLottery(){
     ctx(); // unlock audio on user gesture
     var seconds = Math.max(3, Math.min(60, parseInt(secondsInput.value,10) || 7));
     var direction = directionSelect.value; // 'suspense' or 'sequential'
@@ -795,7 +808,7 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
     renderReveal();
     startTimer();
     startBgMusic();
-  });
+  }
 
   function enterLotteryScene(){
     sceneSetup.hidden = true;
@@ -901,10 +914,20 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
       requestAnimationFrame(function(){ blade.style.top = '128px'; });
     }
   }
-  pauseBtn.addEventListener('click', togglePause);
+  pauseBtn.addEventListener('click', function(){
+    if(!state || state.phase !== 'running') return;
+    if(paused){
+      openPasswordModal(togglePause, 'Enter password to resume', 'Resuming restarts the countdown for the current pick. Enter the password to continue.');
+    } else {
+      openPasswordModal(togglePause, 'Enter password to pause', 'Pausing stops the countdown for the current pick. Enter the password to continue.');
+    }
+  });
   revealBtn.addEventListener('click', function(){
-    clearInterval(timerHandle);
-    reveal();
+    if(!state || state.phase !== 'running') return;
+    openPasswordModal(function(){
+      clearInterval(timerHandle);
+      reveal();
+    }, 'Enter password to reveal now', 'Revealing now skips the rest of the countdown for this pick. Enter the password to continue.');
   });
 
   function reveal(){
@@ -1083,8 +1106,12 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
     refreshReplayBanner();
   }
 
-  /* ---------------- password-protected reset ---------------- */
-  function openPasswordModal(){
+  /* ---------------- password-protected controls ---------------- */
+  var pendingAction = null;
+  function openPasswordModal(action, title, desc){
+    pendingAction = action;
+    passwordTitleEl.textContent = title || 'Enter password to continue';
+    passwordDescEl.textContent = desc || 'Enter the password to continue.';
     passwordInput.value = '';
     passwordError.textContent = '';
     passwordOverlay.classList.add('show');
@@ -1092,12 +1119,15 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
   }
   function closePasswordModal(){
     passwordOverlay.classList.remove('show');
+    pendingAction = null;
   }
   function attemptPasswordConfirm(){
     var entered = passwordInput.value.trim().toLowerCase();
     if(entered === RESET_PASSWORD.toLowerCase()){
-      closePasswordModal();
-      performReset();
+      var action = pendingAction;
+      passwordOverlay.classList.remove('show');
+      pendingAction = null;
+      if(action) action();
     } else {
       passwordError.textContent = 'Incorrect password. Try again.';
       passwordBox.classList.remove('shake');
@@ -1118,7 +1148,18 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
   });
 
   newDraftBtn.addEventListener('click', function(){
-    openPasswordModal();
+    openPasswordModal(
+      performReset,
+      'Enter password to reset',
+      'Resetting clears the current draft order. Enter the reset password to continue.'
+    );
+  });
+  resetLotteryBtn.addEventListener('click', function(){
+    openPasswordModal(
+      performReset,
+      'Enter password to reset',
+      'Resetting clears the current draft order and stops the lottery in progress. Enter the reset password to continue.'
+    );
   });
 
   /* ---------------- replay ---------------- */
