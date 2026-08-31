@@ -280,7 +280,16 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
 .order-comment{flex:1;font-size:.82rem;color:var(--bone-dim);min-width:0;}
 .order-row.locked .order-comment{color:#4a4a54;}
 
-.sound-toggle{position:fixed;top:60px;left:18px;z-index:50;}
+.sound-toggle{position:fixed;top:60px;right:18px;z-index:50;}
+.music-blocked-notice{
+  position:fixed;top:104px;right:18px;z-index:50;
+  border-color:var(--blood-bright);color:var(--blood-bright);
+  animation:pulseNotice 1.6s ease-in-out infinite;
+}
+@keyframes pulseNotice{
+  0%,100%{opacity:1;}
+  50%{opacity:.55;}
+}
 
 /* ---------- password modal ---------- */
 .password-overlay{
@@ -327,6 +336,7 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
 </div>
 
 <button id="sound-toggle" class="sound-toggle small" type="button">🔊 Sound on</button>
+<button id="music-blocked-notice" class="small music-blocked-notice" type="button" hidden>🔇 Music blocked &mdash; tap to play</button>
 <audio id="bg-music" loop preload="auto" src="https://www.dropbox.com/scl/fi/qwycdxncpvifk4eyscyyh/Troy.wav?rlkey=b6fgeo7s727xaocimjeyx7kbi&amp;st=crc84u7a&amp;dl=1"></audio>
 
 <!-- ============ SETUP ============ -->
@@ -610,7 +620,11 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
   var bgMusic = document.getElementById('bg-music');
   var BG_MUSIC_VOLUME = 0.4;
   var bgFadeHandle = null;
+  var musicNotice = document.getElementById('music-blocked-notice');
   bgMusic.volume = 0;
+
+  function showMusicBlockedNotice(){ if(musicNotice) musicNotice.hidden = false; }
+  function hideMusicBlockedNotice(){ if(musicNotice) musicNotice.hidden = true; }
 
   function startBgMusic(){
     if(!bgMusic) return;
@@ -619,13 +633,19 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
     bgMusic.volume = soundOn ? BG_MUSIC_VOLUME : 0;
     bgMusic.muted = false;
     var p = bgMusic.play();
-    if(p && p.catch){ p.catch(function(){}); } // ignore autoplay rejections
+    if(p && p.catch){
+      p.catch(function(err){
+        console.error('Decapitation Station: background music failed to start.', err);
+        showMusicBlockedNotice();
+      });
+    }
   }
   function stopBgMusic(){
     if(!bgMusic) return;
     clearInterval(bgFadeHandle);
     bgMusic.pause();
     bgMusic.currentTime = 0;
+    hideMusicBlockedNotice();
   }
   function fadeOutBgMusic(){
     if(!bgMusic) return;
@@ -641,6 +661,18 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
         bgMusic.currentTime = 0;
       }
     }, 60);
+  }
+  if(musicNotice){
+    musicNotice.addEventListener('click', function(){
+      var p = bgMusic.play();
+      if(p && p.then){
+        p.then(hideMusicBlockedNotice).catch(function(err){
+          console.error('Decapitation Station: background music retry failed.', err);
+        });
+      } else {
+        hideMusicBlockedNotice();
+      }
+    });
   }
 
   /* ---------------- helpers ---------------- */
@@ -751,13 +783,15 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
   function showResumeBanner(saved){
     resumeBanner.hidden = false;
     resumeBanner.querySelector('.r-resume').addEventListener('click', function(){
+      ctx();
       state = saved;
       resumeBanner.hidden = true;
+      if(state.phase !== 'complete'){ startBgMusic(); }
       enterLotteryScene();
       renderOrderBoard(orderBody);
       renderTicker();
       if(state.phase === 'complete'){ showComplete(); }
-      else { renderReveal(); startTimer(); startBgMusic(); }
+      else { renderReveal(); startTimer(); }
     });
     resumeBanner.querySelector('.r-discard').addEventListener('click', function(){
       clearState();
@@ -777,6 +811,7 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
 
   function beginLottery(){
     ctx(); // unlock audio on user gesture
+    startBgMusic(); // start music as close to the click gesture as possible
     var seconds = Math.max(3, Math.min(60, parseInt(secondsInput.value,10) || 7));
     var direction = directionSelect.value; // 'suspense' or 'sequential'
     var order = shuffle(TEAM_NAMES); // order[0] = pick 1 ... order[N-1] = last pick
@@ -807,7 +842,6 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
     renderTicker();
     renderReveal();
     startTimer();
-    startBgMusic();
   }
 
   function enterLotteryScene(){
@@ -1175,6 +1209,7 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
   function startReplayFromData(data){
     if(!data || !data.order || !data.order.length) return;
     ctx();
+    startBgMusic();
     var total = TEAM_NAMES.length;
     var direction = data.direction || 'suspense';
     var seconds = data.seconds || 5;
@@ -1209,7 +1244,6 @@ label.field{display:flex;flex-direction:column;gap:6px;font-size:.72rem;letter-s
     renderTicker();
     renderReveal();
     startTimer();
-    startBgMusic();
   }
   replayBtn.addEventListener('click', function(){
     startReplayFromData(loadLastResults());
